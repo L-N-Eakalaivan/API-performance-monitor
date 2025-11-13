@@ -1,0 +1,391 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">API Monitor</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <button type="button" class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#addApiModal">
+            <i class="fas fa-plus me-1"></i>Add New API
+        </button>
+    </div>
+</div>
+
+<!-- Test API Form -->
+<div class="chart-container">
+    <h5 class="mb-4">Test API Endpoint</h5>
+    <form id="test-api-form">
+        <div class="row">
+            <div class="col-md-8">
+                <div class="input-group mb-3">
+                    <span class="input-group-text">URL</span>
+                    <input type="url" class="form-control" id="api-url" placeholder="https://api.example.com/endpoint" required>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="fas fa-bolt me-1"></i>Test API
+                </button>
+            </div>
+        </div>
+    </form>
+    
+    <!-- Test Results -->
+    <div id="test-results" class="mt-4" style="display: none;">
+        <h6>Test Results</h6>
+        <div class="card">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-6">
+                        <p><strong>Endpoint:</strong> <span id="result-url"></span></p>
+                        <p><strong>Status Code:</strong> <span id="result-status"></span></p>
+                        <p><strong>Response Time:</strong> <span id="result-time"></span></p>
+                    </div>
+                    <div class="col-md-6">
+                        <p><strong>Timestamp:</strong> <span id="result-timestamp"></span></p>
+                        <p><strong>Status:</strong> <span id="result-indicator"></span></p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Monitored APIs Table -->
+<div class="chart-container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h5>Monitored APIs</h5>
+        <div>
+            <button class="btn btn-sm btn-outline-secondary me-2" id="refresh-apis-btn">
+                <i class="fas fa-sync-alt me-1"></i>Refresh
+            </button>
+            <button class="btn btn-sm btn-outline-danger" id="delete-selected-btn">
+                <i class="fas fa-trash me-1"></i>Delete Selected
+            </button>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover api-table">
+            <thead>
+                <tr>
+                    <th>
+                        <input class="form-check-input" type="checkbox" id="select-all">
+                    </th>
+                    <th>API Endpoint</th>
+                    <th>Last Response Time</th>
+                    <th>Status</th>
+                    <th>Last Checked</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody id="monitored-apis-body">
+                <!-- Data will be loaded by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Add API Modal -->
+<div class="modal fade" id="addApiModal" tabindex="-1" aria-labelledby="addApiModalLabel" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="addApiModalLabel">Add New API Endpoint</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form id="add-api-form">
+                    <div class="mb-3">
+                        <label for="new-api-url" class="form-label">API Endpoint URL</label>
+                        <input type="url" class="form-control" id="new-api-url" placeholder="https://api.example.com/endpoint" required>
+                    </div>
+                    <div class="mb-3">
+                        <label for="check-interval" class="form-label">Check Interval (minutes)</label>
+                        <select class="form-select" id="check-interval">
+                            <option value="1">1 minute</option>
+                            <option value="5" selected>5 minutes</option>
+                            <option value="10">10 minutes</option>
+                            <option value="30">30 minutes</option>
+                            <option value="60">1 hour</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label for="alert-email" class="form-label">Alert Email (optional)</label>
+                        <input type="email" class="form-control" id="alert-email" placeholder="your@email.com">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <button type="button" class="btn btn-primary" id="save-api-btn">Save API</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Load monitored APIs
+        loadMonitoredApis();
+        
+        // Test API form submission
+        document.getElementById('test-api-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            
+            const apiUrl = document.getElementById('api-url').value;
+            if (!apiUrl) return;
+            
+            // Show loading state
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Testing...';
+            submitBtn.disabled = true;
+            
+            // Call backend API to test the endpoint
+            fetch('/api/test', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({url: apiUrl})
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                // Display results
+                document.getElementById('result-url').textContent = data.url;
+                document.getElementById('result-status').innerHTML = `<span class="status-badge status-success">${data.status_code} OK</span>`;
+                document.getElementById('result-time').textContent = data.response_time.toFixed(2) + 'ms';
+                document.getElementById('result-timestamp').textContent = new Date(data.timestamp).toLocaleString();
+                document.getElementById('result-indicator').innerHTML = '<span class="status-badge status-success">Success</span>';
+                
+                document.getElementById('test-results').style.display = 'block';
+                
+                // Reload monitored APIs to show updated last checked time
+                loadMonitoredApis();
+            })
+            .catch(error => {
+                // Display error
+                document.getElementById('result-url').textContent = apiUrl;
+                document.getElementById('result-status').innerHTML = '<span class="status-badge status-error">Error</span>';
+                document.getElementById('result-time').textContent = 'Failed';
+                document.getElementById('result-timestamp').textContent = new Date().toLocaleString();
+                document.getElementById('result-indicator').innerHTML = `<span class="status-badge status-error">${error.message}</span>`;
+                
+                document.getElementById('test-results').style.display = 'block';
+                
+                // Reload monitored APIs even on error to show updated last checked time
+                loadMonitoredApis();
+            })
+            .finally(() => {
+                // Reset button
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            });
+        });
+        
+        // Select all checkboxes
+        document.getElementById('select-all').addEventListener('change', function() {
+            const checkboxes = document.querySelectorAll('#monitored-apis-body input[type="checkbox"]');
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = this.checked;
+            });
+        });
+        
+        // Save API button
+        document.getElementById('save-api-btn').addEventListener('click', function() {
+            const apiUrl = document.getElementById('new-api-url').value;
+            const checkInterval = document.getElementById('check-interval').value;
+            const alertEmail = document.getElementById('alert-email').value;
+            
+            if (!apiUrl) {
+                alert('Please enter a valid API URL');
+                return;
+            }
+            
+            // Call backend API to save the new API
+            fetch('/api/monitored-apis', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    url: apiUrl,
+                    check_interval: parseInt(checkInterval),
+                    alert_email: alertEmail
+                })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+                
+                // Close modal and reset form
+                bootstrap.Modal.getInstance(document.getElementById('addApiModal')).hide();
+                document.getElementById('add-api-form').reset();
+                
+                // Reload monitored APIs
+                loadMonitoredApis();
+                
+                // Refresh sidebar APIs
+                if (typeof refreshSidebarApis === 'function') {
+                    refreshSidebarApis();
+                }
+                
+                // Show success message
+                alert('API endpoint added successfully!');
+            })
+            .catch(error => {
+                alert('Error adding API: ' + error.message);
+            });
+        });
+        
+        // Refresh APIs button
+        document.getElementById('refresh-apis-btn').addEventListener('click', loadMonitoredApis);
+        
+        // Delete selected APIs button
+        document.getElementById('delete-selected-btn').addEventListener('click', function() {
+            const selectedCheckboxes = document.querySelectorAll('#monitored-apis-body input[type="checkbox"]:checked');
+            
+            if (selectedCheckboxes.length === 0) {
+                alert('Please select at least one API to delete.');
+                return;
+            }
+            
+            if (!confirm(`Are you sure you want to delete ${selectedCheckboxes.length} API(s)?`)) {
+                return;
+            }
+            
+            // Delete each selected API
+            let deleteCount = 0;
+            selectedCheckboxes.forEach(checkbox => {
+                const apiId = checkbox.closest('tr').dataset.apiId;
+                fetch(`/api/monitored-apis/${apiId}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        deleteCount++;
+                        if (deleteCount === selectedCheckboxes.length) {
+                            // Reload the list after all deletions
+                            loadMonitoredApis();
+                            
+                            // Refresh sidebar APIs
+                            if (typeof refreshSidebarApis === 'function') {
+                                refreshSidebarApis();
+                            }
+                            
+                            alert(`${deleteCount} API(s) deleted successfully!`);
+                        }
+                    }
+                })
+                .catch(error => {
+                    console.error('Error deleting API:', error);
+                });
+            });
+        });
+    });
+    
+    function loadMonitoredApis() {
+        // Show loading state
+        const tbody = document.getElementById('monitored-apis-body');
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center">Loading...</td></tr>';
+        
+        // Fetch monitored APIs from backend
+        fetch('/api/monitored-apis')
+        .then(response => response.json())
+        .then(apis => {
+            if (apis.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center">No APIs are being monitored. Add an API to get started.</td></tr>';
+                return;
+            }
+            
+            // Populate table
+            tbody.innerHTML = '';
+            apis.forEach(api => {
+                // Format the last checked timestamp
+                let lastCheckedDisplay = 'Never';
+                if (api.last_checked) {
+                    // Convert to local time format
+                    const lastCheckedDate = new Date(api.last_checked);
+                    const now = new Date();
+                    const diffMs = now - lastCheckedDate;
+                    const diffMins = Math.floor(diffMs / 60000);
+                    const diffHours = Math.floor(diffMs / 3600000);
+                    
+                    if (diffMins < 1) {
+                        lastCheckedDisplay = 'Just now';
+                    } else if (diffMins < 60) {
+                        lastCheckedDisplay = `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+                    } else if (diffHours < 24) {
+                        lastCheckedDisplay = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+                    } else {
+                        lastCheckedDisplay = lastCheckedDate.toLocaleString();
+                    }
+                }
+                
+                const row = document.createElement('tr');
+                row.dataset.apiId = api.id;
+                row.innerHTML = `
+                    <td><input class="form-check-input" type="checkbox"></td>
+                    <td>${api.url}</td>
+                    <td>-</td>
+                    <td><span class="status-badge status-success">Active</span></td>
+                    <td>${lastCheckedDisplay}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary me-1 test-api-btn" data-api-url="${api.url}">Test</button>
+                        <button class="btn btn-sm btn-outline-warning me-1 edit-api-btn">Edit</button>
+                        <button class="btn btn-sm btn-outline-danger delete-api-btn">Delete</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+            
+            // Add event listeners to action buttons
+            document.querySelectorAll('.test-api-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const apiUrl = this.getAttribute('data-api-url');
+                    document.getElementById('api-url').value = apiUrl;
+                    document.getElementById('test-api-form').dispatchEvent(new Event('submit'));
+                });
+            });
+            
+            document.querySelectorAll('.delete-api-btn').forEach(button => {
+                button.addEventListener('click', function() {
+                    const apiId = this.closest('tr').dataset.apiId;
+                    if (confirm('Are you sure you want to delete this API?')) {
+                        fetch(`/api/monitored-apis/${apiId}`, {
+                            method: 'DELETE'
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                loadMonitoredApis();
+                                
+                                // Refresh sidebar APIs
+                                if (typeof refreshSidebarApis === 'function') {
+                                    refreshSidebarApis();
+                                }
+                                
+                                alert('API deleted successfully!');
+                            }
+                        })
+                        .catch(error => {
+                            alert('Error deleting API: ' + error.message);
+                        });
+                    }
+                });
+            });
+        })
+        .catch(error => {
+            tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger">Error loading APIs: ${error.message}</td></tr>`;
+        });
+    }
+</script>
+{% endblock %}

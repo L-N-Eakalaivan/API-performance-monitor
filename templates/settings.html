@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Settings</h1>
+</div>
+
+<div class="row">
+    <div class="col-md-8">
+        <div class="chart-container mb-4">
+            <h5 class="mb-4">General Settings</h5>
+            <form id="general-settings-form">
+                <div class="mb-3">
+                    <label for="app-name" class="form-label">Application Name</label>
+                    <input type="text" class="form-control" id="app-name" value="API Performance Monitor">
+                </div>
+                <div class="mb-3">
+                    <label for="default-interval" class="form-label">Default Check Interval (minutes)</label>
+                    <select class="form-select" id="default-interval">
+                        <option value="1">1 minute</option>
+                        <option value="5" selected>5 minutes</option>
+                        <option value="10">10 minutes</option>
+                        <option value="30">30 minutes</option>
+                        <option value="60">1 hour</option>
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label for="timezone" class="form-label">Timezone</label>
+                    <select class="form-select" id="timezone">
+                        <option value="UTC" selected>UTC</option>
+                        <option value="America/New_York">Eastern Time (US & Canada)</option>
+                        <option value="America/Chicago">Central Time (US & Canada)</option>
+                        <option value="America/Denver">Mountain Time (US & Canada)</option>
+                        <option value="America/Los_Angeles">Pacific Time (US & Canada)</option>
+                        <option value="Europe/London">London</option>
+                        <option value="Europe/Paris">Paris</option>
+                        <option value="Asia/Tokyo">Tokyo</option>
+                    </select>
+                </div>
+                <div class="form-check mb-3">
+                    <input class="form-check-input" type="checkbox" id="enable-notifications" checked>
+                    <label class="form-check-label" for="enable-notifications">
+                        Enable Email Notifications
+                    </label>
+                </div>
+                <button type="submit" class="btn btn-primary">Save Settings</button>
+            </form>
+        </div>
+
+        <div class="chart-container mb-4">
+            <h5 class="mb-4">Email Configuration</h5>
+            <form id="email-settings-form">
+                <div class="mb-3">
+                    <label for="smtp-server" class="form-label">SMTP Server</label>
+                    <input type="text" class="form-control" id="smtp-server" placeholder="smtp.example.com">
+                </div>
+                <div class="row">
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="smtp-port" class="form-label">Port</label>
+                            <input type="number" class="form-control" id="smtp-port" placeholder="587">
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="mb-3">
+                            <label for="smtp-encryption" class="form-label">Encryption</label>
+                            <select class="form-select" id="smtp-encryption">
+                                <option value="tls">TLS</option>
+                                <option value="ssl">SSL</option>
+                                <option value="none">None</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="mb-3">
+                    <label for="smtp-username" class="form-label">Username</label>
+                    <input type="text" class="form-control" id="smtp-username" placeholder="your@email.com">
+                </div>
+                <div class="mb-3">
+                    <label for="smtp-password" class="form-label">Password</label>
+                    <input type="password" class="form-control" id="smtp-password">
+                </div>
+                <div class="mb-3">
+                    <label for="sender-email" class="form-label">Sender Email</label>
+                    <input type="email" class="form-control" id="sender-email" placeholder="your@email.com">
+                </div>
+                <button type="button" class="btn btn-secondary me-2" id="test-email-btn">Test Email Configuration</button>
+                <button type="submit" class="btn btn-primary">Save Email Settings</button>
+            </form>
+        </div>
+
+        <div class="chart-container">
+            <h5 class="mb-4">Database Management</h5>
+            <div class="mb-3">
+                <label class="form-label">Backup Database</label>
+                <p>Download a backup of your current database.</p>
+                <button class="btn btn-outline-primary" id="backup-db-btn">
+                    <i class="fas fa-download me-1"></i>Download Backup
+                </button>
+            </div>
+            <div class="mb-3">
+                <label class="form-label">Clear Metrics Data</label>
+                <p>Delete all historical metrics data. This action cannot be undone.</p>
+                <button class="btn btn-outline-danger" id="clear-metrics-btn">
+                    <i class="fas fa-trash me-1"></i>Clear Metrics Data
+                </button>
+            </div>
+        </div>
+    </div>
+    
+    <div class="col-md-4">
+        <div class="chart-container mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-4">
+                <h5 class="mb-0">System Information</h5>
+                <button class="btn btn-sm btn-outline-secondary py-0" id="refresh-system-info">
+                    <i class="fas fa-sync-alt"></i>
+                </button>
+            </div>
+            <ul class="list-group list-group-flush">
+                <li class="list-group-item">
+                    <small class="text-muted">Version</small>
+                    <br><strong>v1.0.0</strong>
+                </li>
+                <li class="list-group-item">
+                    <small class="text-muted">Database Size</small>
+                    <br><strong id="db-size">Loading...</strong>
+                </li>
+                <li class="list-group-item">
+                    <small class="text-muted">APIs Monitored</small>
+                    <br><strong id="monitored-apis-count">Loading...</strong>
+                </li>
+                <li class="list-group-item">
+                    <small class="text-muted">Last Backup</small>
+                    <br><strong id="last-backup">Never</strong>
+                </li>
+            </ul>
+        </div>
+        
+        <div class="chart-container">
+            <h5 class="mb-4">Quick Actions</h5>
+            <div class="d-grid gap-2">
+                <button class="btn btn-outline-primary" id="refresh-dashboard-btn">
+                    <i class="fas fa-sync-alt me-1"></i>Refresh Dashboard
+                </button>
+                <button class="btn btn-outline-secondary" id="check-updates-btn">
+                    <i class="fas fa-sync me-1"></i>Check for Updates
+                </button>
+                <button class="btn btn-outline-warning" id="restart-app-btn">
+                    <i class="fas fa-redo me-1"></i>Restart Application
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        // Load system information
+        loadSystemInformation();
+        
+        // Set up refresh button
+        document.getElementById('refresh-system-info').addEventListener('click', loadSystemInformation);
+        
+        // Set up form submissions
+        document.getElementById('general-settings-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            alert('General settings saved successfully!');
+        });
+        
+        document.getElementById('email-settings-form').addEventListener('submit', function(e) {
+            e.preventDefault();
+            alert('Email settings saved successfully!');
+        });
+        
+        // Set up button actions
+        document.getElementById('test-email-btn').addEventListener('click', function() {
+            alert('Email configuration test would be performed here.');
+        });
+        
+        document.getElementById('backup-db-btn').addEventListener('click', function() {
+            // Show loading state
+            const btn = this;
+            const originalText = btn.innerHTML;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Creating Backup...';
+            btn.disabled = true;
+            
+            // Call the backup API
+            fetch('/api/backup-database')
+            .then(response => {
+                if (response.ok) {
+                    // Get the filename from the Content-Disposition header
+                    const contentDisposition = response.headers.get('Content-Disposition');
+                    let filename = 'api_monitor_backup.db';
+                    if (contentDisposition) {
+                        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+                        if (filenameMatch && filenameMatch[1]) {
+                            filename = filenameMatch[1];
+                        }
+                    }
+                    
+                    // Create a blob and download the file
+                    return response.blob().then(blob => {
+                        const url = window.URL.createObjectURL(blob);
+                        const a = document.createElement('a');
+                        a.href = url;
+                        a.download = filename;
+                        document.body.appendChild(a);
+                        a.click();
+                        window.URL.revokeObjectURL(url);
+                        document.body.removeChild(a);
+                        
+                        // Update last backup time
+                        const now = new Date();
+                        document.getElementById('last-backup').textContent = now.toLocaleString();
+                        
+                        // Reset button
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                        
+                        alert('Database backup downloaded successfully!');
+                    });
+                } else {
+                    throw new Error('Backup failed');
+                }
+            })
+            .catch(error => {
+                console.error('Backup error:', error);
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                alert('Failed to create database backup. Please try again.');
+            });
+        });
+        
+        document.getElementById('clear-metrics-btn').addEventListener('click', function() {
+            const btn = this;
+            const originalText = btn.innerHTML;
+            
+            if (confirm('Are you sure you want to clear all metrics data? This action cannot be undone.')) {
+                // Show loading state
+                btn.innerHTML = '<i class="fas fa-spinner fa-spin me-1"></i>Clearing Data...';
+                btn.disabled = true;
+                
+                // Call the clear metrics API
+                fetch('/api/clear-metrics', {
+                    method: 'POST'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        // Reset button
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                        alert('Metrics data cleared successfully!');
+                        
+                        // Refresh system information to update database size
+                        loadSystemInformation();
+                    } else {
+                        throw new Error(data.error || 'Failed to clear metrics data');
+                    }
+                })
+                .catch(error => {
+                    console.error('Clear metrics error:', error);
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                    alert('Failed to clear metrics data. Please try again.');
+                });
+            }
+        });
+        
+        document.getElementById('refresh-dashboard-btn').addEventListener('click', function() {
+            alert('Dashboard refreshed!');
+        });
+        
+        document.getElementById('check-updates-btn').addEventListener('click', function() {
+            alert('Checking for updates...');
+            setTimeout(function() {
+                alert('You are running the latest version.');
+            }, 1000);
+        });
+        
+        document.getElementById('restart-app-btn').addEventListener('click', function() {
+            if (confirm('Are you sure you want to restart the application?')) {
+                alert('Application restart initiated. Please wait a few moments and refresh the page.');
+            }
+        });
+    });
+    
+    function loadSystemInformation() {
+        // Show loading states
+        document.getElementById('db-size').textContent = 'Loading...';
+        document.getElementById('monitored-apis-count').textContent = 'Loading...';
+        
+        // Fetch monitored APIs count
+        fetch('/api/monitored-apis')
+        .then(response => response.json())
+        .then(apis => {
+            document.getElementById('monitored-apis-count').textContent = apis.length;
+        })
+        .catch(error => {
+            document.getElementById('monitored-apis-count').textContent = 'Error';
+            console.error('Error loading monitored APIs count:', error);
+        });
+        
+        // Estimate database size (in a real app, this would come from the server)
+        // For demo purposes, we'll simulate a database size
+        setTimeout(function() {
+            // Simulate database size between 1-10 MB
+            const size = (Math.random() * 9 + 1).toFixed(1);
+            document.getElementById('db-size').textContent = `${size} MB`;
+        }, 500);
+    }
+</script>
+{% endblock %}

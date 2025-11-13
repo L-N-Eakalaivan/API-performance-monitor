@@ -1,0 +1,461 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">API Performance Overview</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <div class="btn-group me-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="share-btn">
+                <i class="fas fa-share me-1"></i>Share
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="export-btn">
+                <i class="fas fa-download me-1"></i>Export
+            </button>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" id="date-filter-btn">
+            <i class="fas fa-calendar-alt me-1"></i><span id="date-filter-text">This week</span>
+        </button>
+        <div class="dropdown-menu" id="date-filter-dropdown">
+            <a class="dropdown-item" href="#" data-range="today">Today</a>
+            <a class="dropdown-item" href="#" data-range="yesterday">Yesterday</a>
+            <a class="dropdown-item" href="#" data-range="this-week">This week</a>
+            <a class="dropdown-item" href="#" data-range="this-month">This month</a>
+            <a class="dropdown-item" href="#" data-range="last-month">Last month</a>
+        </div>
+    </div>
+</div>
+
+<!-- Metrics Summary Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="total-apis">0</div>
+            <div class="metric-title">Total APIs Monitored</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="avg-response">0<span class="small">ms</span></div>
+            <div class="metric-title">Avg Response Time</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="uptime">0<span class="small">%</span></div>
+            <div class="metric-title">System Uptime</div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card metric-card">
+            <div class="metric-value" id="errors">0</div>
+            <div class="metric-title">Errors (24h)</div>
+        </div>
+    </div>
+</div>
+
+<!-- Charts Section -->
+<div class="row">
+    <div class="col-md-8">
+        <div class="chart-container">
+            <h5 class="mb-4">Response Time Trends</h5>
+            <canvas id="responseTimeChart" height="100"></canvas>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="chart-container">
+            <h5 class="mb-4">Status Distribution</h5>
+            <canvas id="statusChart" height="100"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Activity Table -->
+<div class="chart-container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h5>Recent API Activity</h5>
+        <button class="btn btn-primary btn-sm" id="refresh-activity-btn">
+            <i class="fas fa-sync-alt me-1"></i>Refresh
+        </button>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover api-table">
+            <thead>
+                <tr>
+                    <th>API Endpoint</th>
+                    <th>Response Time</th>
+                    <th>Status</th>
+                    <th>Last Checked</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody id="recent-activity-body">
+                <!-- Data will be populated by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Global variables for charts
+    let responseChart, statusChart;
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize charts
+        initCharts();
+        
+        // Load initial data
+        loadMetricsData();
+        loadRecentActivity();
+        
+        // Set up event listeners
+        document.getElementById('share-btn').addEventListener('click', shareDashboard);
+        document.getElementById('export-btn').addEventListener('click', exportMetrics);
+        document.getElementById('refresh-activity-btn').addEventListener('click', loadRecentActivity);
+        
+        // Set up date filter dropdown
+        document.getElementById('date-filter-btn').addEventListener('click', function() {
+            document.getElementById('date-filter-dropdown').classList.toggle('show');
+        });
+        
+        // Set up date filter items
+        document.querySelectorAll('#date-filter-dropdown .dropdown-item').forEach(item => {
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                const range = this.getAttribute('data-range');
+                const text = this.textContent;
+                document.getElementById('date-filter-text').textContent = text;
+                document.getElementById('date-filter-dropdown').classList.remove('show');
+                // Reload data with the selected date range
+                loadMetricsData();
+                loadRecentActivity();
+            });
+        });
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!document.getElementById('date-filter-btn').contains(e.target)) {
+                document.getElementById('date-filter-dropdown').classList.remove('show');
+            }
+        });
+    });
+    
+    function initCharts() {
+        // Response Time Chart
+        const responseCtx = document.getElementById('responseTimeChart').getContext('2d');
+        responseChart = new Chart(responseCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Average Response Time (ms)',
+                    data: [],
+                    borderColor: '#4361ee',
+                    backgroundColor: 'rgba(67, 97, 238, 0.1)',
+                    tension: 0.3,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Response Time (ms)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        }
+                    }
+                }
+            }
+        });
+
+        // Status Distribution Chart
+        const statusCtx = document.getElementById('statusChart').getContext('2d');
+        statusChart = new Chart(statusCtx, {
+            type: 'doughnut',
+            data: {
+                labels: ['2xx Success', '4xx Client Error', '5xx Server Error'],
+                datasets: [{
+                    data: [0, 0, 0],
+                    backgroundColor: [
+                        '#4cc9f0',
+                        '#f72585',
+                        '#ff6b6b'
+                    ]
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'bottom'
+                    }
+                }
+            }
+        });
+    }
+    
+    function loadMetricsData() {
+        // Show loading state for charts
+        if (responseChart) {
+            responseChart.data.labels = ['Loading...'];
+            responseChart.data.datasets[0].data = [0];
+            responseChart.update();
+        }
+        
+        if (statusChart) {
+            statusChart.data.datasets[0].data = [0, 0, 0];
+            statusChart.update();
+        }
+        
+        // Fetch real data from backend
+        fetch('/api/metrics')
+        .then(response => response.json())
+        .then(metrics => {
+            // Calculate metrics
+            const totalApis = new Set(metrics.map(m => m.url)).size;
+            const successfulMetrics = metrics.filter(m => m.status_code && m.status_code >= 200 && m.status_code < 300);
+            const avgResponse = successfulMetrics.length > 0 
+                ? (successfulMetrics.reduce((sum, m) => sum + m.response_time, 0) / successfulMetrics.length).toFixed(2)
+                : 0;
+            
+            // Calculate uptime (successful requests / total requests)
+            const totalRequests = metrics.length;
+            const successfulRequests = successfulMetrics.length;
+            const uptime = totalRequests > 0 ? ((successfulRequests / totalRequests) * 100).toFixed(1) : 0;
+            
+            // Calculate errors in last 24 hours
+            const oneDayAgo = new Date();
+            oneDayAgo.setDate(oneDayAgo.getDate() - 1);
+            const recentErrors = metrics.filter(m => {
+                if (!m.timestamp) return false;
+                const metricTime = new Date(m.timestamp);
+                return metricTime >= oneDayAgo && 
+                    (m.error_message || (m.status_code && (m.status_code >= 400 || m.status_code === 0)));
+            }).length;
+            
+            // Update metric cards
+            updateMetricCards({
+                totalApis: totalApis,
+                avgResponse: avgResponse,
+                uptime: uptime,
+                errors: recentErrors
+            });
+            
+            // Update charts with real data
+            updateResponseTimeChart(metrics);
+            updateStatusChart(metrics);
+        })
+        .catch(error => {
+            console.error('Error loading metrics:', error);
+            // Show error state
+            if (responseChart) {
+                responseChart.data.labels = ['Error'];
+                responseChart.data.datasets[0].data = [0];
+                responseChart.update();
+            }
+            
+            if (statusChart) {
+                statusChart.data.datasets[0].data = [0, 0, 0];
+                statusChart.update();
+            }
+        });
+    }
+    
+    function updateMetricCards(data) {
+        document.getElementById('total-apis').textContent = data.totalApis;
+        document.getElementById('avg-response').innerHTML = `${data.avgResponse}<span class="small">ms</span>`;
+        document.getElementById('uptime').innerHTML = `${data.uptime}<span class="small">%</span>`;
+        document.getElementById('errors').textContent = data.errors;
+    }
+    
+    function updateResponseTimeChart(metrics) {
+        // Group metrics by hour for the last 24 hours
+        const now = new Date();
+        const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        
+        // Filter metrics from last 24 hours
+        const recentMetrics = metrics.filter(m => {
+            if (!m.timestamp) return false;
+            const metricTime = new Date(m.timestamp);
+            return metricTime >= twentyFourHoursAgo && metricTime <= now && m.response_time;
+        });
+        
+        // Group by hour
+        const hourlyData = {};
+        recentMetrics.forEach(m => {
+            const hour = new Date(m.timestamp).getHours();
+            if (!hourlyData[hour]) {
+                hourlyData[hour] = { total: 0, count: 0 };
+            }
+            hourlyData[hour].total += m.response_time;
+            hourlyData[hour].count++;
+        });
+        
+        // Prepare chart data
+        const labels = [];
+        const data = [];
+        
+        for (let i = 0; i < 24; i++) {
+            const hourLabel = i + ':00';
+            labels.push(hourLabel);
+            if (hourlyData[i] && hourlyData[i].count > 0) {
+                data.push((hourlyData[i].total / hourlyData[i].count).toFixed(2));
+            } else {
+                data.push(0);
+            }
+        }
+        
+        // Update chart
+        responseChart.data.labels = labels;
+        responseChart.data.datasets[0].data = data;
+        responseChart.update();
+    }
+    
+    function updateStatusChart(metrics) {
+        // Count status codes
+        let success = 0; // 2xx
+        let clientError = 0; // 4xx
+        let serverError = 0; // 5xx
+        let other = 0; // Others or errors
+        
+        metrics.forEach(m => {
+            if (m.error_message) {
+                // Count as server error if there's an error message
+                serverError++;
+            } else if (m.status_code) {
+                const code = m.status_code;
+                if (code >= 200 && code < 300) {
+                    success++;
+                } else if (code >= 400 && code < 500) {
+                    clientError++;
+                } else if (code >= 500) {
+                    serverError++;
+                } else {
+                    other++;
+                }
+            }
+        });
+        
+        // Update chart
+        statusChart.data.datasets[0].data = [success, clientError, serverError];
+        statusChart.update();
+    }
+    
+    function loadRecentActivity() {
+        // Show loading state
+        const tbody = document.getElementById('recent-activity-body');
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center">Loading...</td></tr>';
+        
+        // Fetch data from backend
+        fetch('/api/metrics')
+        .then(response => response.json())
+        .then(metrics => {
+            if (metrics.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="text-center">No activity found</td></tr>';
+                return;
+            }
+            
+            // Show only the 5 most recent metrics
+            const recentMetrics = metrics.slice(0, 5);
+            
+            // Populate table
+            tbody.innerHTML = '';
+            recentMetrics.forEach(metric => {
+                const row = document.createElement('tr');
+                
+                // Format timestamp
+                let timeDisplay = 'Unknown';
+                if (metric.timestamp) {
+                    const date = new Date(metric.timestamp);
+                    const now = new Date();
+                    const diffMs = now - date;
+                    const diffMins = Math.floor(diffMs / 60000);
+                    const diffHours = Math.floor(diffMs / 3600000);
+                    
+                    if (diffMins < 1) {
+                        timeDisplay = 'Just now';
+                    } else if (diffMins < 60) {
+                        timeDisplay = `${diffMins} minute${diffMins !== 1 ? 's' : ''} ago`;
+                    } else if (diffHours < 24) {
+                        timeDisplay = `${diffHours} hour${diffHours !== 1 ? 's' : ''} ago`;
+                    } else {
+                        timeDisplay = date.toLocaleString();
+                    }
+                }
+                
+                // Format response time
+                let responseTimeDisplay = '-';
+                if (metric.response_time) {
+                    responseTimeDisplay = `${metric.response_time.toFixed(2)}ms`;
+                } else if (metric.error_message) {
+                    responseTimeDisplay = 'Failed';
+                }
+                
+                // Status badge
+                let statusBadge = '<span class="status-badge status-error">Error</span>';
+                if (metric.status_code) {
+                    const statusCode = metric.status_code;
+                    if (statusCode >= 200 && statusCode < 300) {
+                        statusBadge = `<span class="status-badge status-success">${statusCode} OK</span>`;
+                    } else if (statusCode >= 400 && statusCode < 500) {
+                        statusBadge = `<span class="status-badge status-error">${statusCode} Error</span>`;
+                    } else if (statusCode >= 500) {
+                        statusBadge = `<span class="status-badge status-error">${statusCode} Error</span>`;
+                    }
+                } else if (metric.error_message) {
+                    statusBadge = '<span class="status-badge status-error">Error</span>';
+                }
+                
+                row.innerHTML = `
+                    <td>${metric.url}</td>
+                    <td>${responseTimeDisplay}</td>
+                    <td>${statusBadge}</td>
+                    <td>${timeDisplay}</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary">Details</button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        })
+        .catch(error => {
+            tbody.innerHTML = `<tr><td colspan="5" class="text-center text-danger">Error loading activity: ${error.message}</td></tr>`;
+        });
+    }
+    
+    function shareDashboard() {
+        // Copy current URL to clipboard
+        navigator.clipboard.writeText(window.location.href).then(function() {
+            alert('Dashboard link copied to clipboard!');
+        }).catch(function() {
+            // Fallback for older browsers
+            const textArea = document.createElement('textarea');
+            textArea.value = window.location.href;
+            document.body.appendChild(textArea);
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+            alert('Dashboard link copied to clipboard!');
+        });
+    }
+    
+    function exportMetrics() {
+        // Download CSV file
+        window.location.href = '/api/export-metrics';
+    }
+</script>
+{% endblock %}

@@ -1,0 +1,706 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2">Performance Dashboard</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <div class="btn-group me-2">
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="export-dashboard-btn">
+                <i class="fas fa-download me-1"></i>Export
+            </button>
+        </div>
+        <button type="button" class="btn btn-sm btn-outline-secondary dropdown-toggle" id="time-range-btn">
+            <i class="fas fa-calendar-alt me-1"></i><span id="time-range-text">Last 7 days</span>
+        </button>
+        <div class="dropdown-menu" id="time-range-dropdown">
+            <a class="dropdown-item" href="#" data-range="1h">Last Hour</a>
+            <a class="dropdown-item" href="#" data-range="24h">Last 24 Hours</a>
+            <a class="dropdown-item" href="#" data-range="7d">Last 7 Days</a>
+            <a class="dropdown-item" href="#" data-range="30d">Last 30 Days</a>
+        </div>
+    </div>
+</div>
+
+<!-- Filter Controls -->
+<div class="chart-container mb-4">
+    <div class="row">
+        <div class="col-md-3">
+            <label class="form-label">API Endpoint</label>
+            <select class="form-select" id="endpoint-filter">
+                <option value="">All Endpoints</option>
+                <!-- Options will be populated by JavaScript -->
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Status Code</label>
+            <select class="form-select" id="status-filter">
+                <option value="">All Statuses</option>
+                <option value="2xx">2xx Success</option>
+                <option value="4xx">4xx Client Error</option>
+                <option value="5xx">5xx Server Error</option>
+            </select>
+        </div>
+        <div class="col-md-3">
+            <label class="form-label">Time Range</label>
+            <select class="form-select" id="time-filter">
+                <option value="">All Time</option>
+                <option>Last Hour</option>
+                <option>Last 24 Hours</option>
+                <option selected>Last 7 Days</option>
+                <option>Last 30 Days</option>
+            </select>
+        </div>
+        <div class="col-md-3 d-flex align-items-end">
+            <button class="btn btn-primary w-100" id="apply-filters-btn">
+                <i class="fas fa-filter me-1"></i>Apply Filters
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Performance Metrics -->
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="chart-container">
+            <h5 class="mb-4">Response Time Distribution</h5>
+            <canvas id="responseDistributionChart" height="200"></canvas>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="chart-container">
+            <h5 class="mb-4">Error Rate Over Time</h5>
+            <canvas id="errorRateChart" height="200"></canvas>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="chart-container">
+            <h5 class="mb-4">Uptime Trend</h5>
+            <canvas id="uptimeChart" height="200"></canvas>
+        </div>
+    </div>
+</div>
+
+<!-- Detailed Charts -->
+<div class="chart-container mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h5 class="mb-0">Response Time Trends by Endpoint</h5>
+        <div class="btn-group" role="group">
+            <input type="radio" class="btn-check" name="view-toggle" id="chart-view" autocomplete="off" checked>
+            <label class="btn btn-outline-primary" for="chart-view">
+                <i class="fas fa-chart-bar me-1"></i>Chart View
+            </label>
+            <input type="radio" class="btn-check" name="view-toggle" id="table-view" autocomplete="off">
+            <label class="btn btn-outline-primary" for="table-view">
+                <i class="fas fa-table me-1"></i>Table View
+            </label>
+        </div>
+    </div>
+    <div id="chart-container">
+        <canvas id="endpointPerformanceChart" height="100"></canvas>
+    </div>
+    <div id="table-container" style="display: none;">
+        <div class="table-responsive">
+            <table class="table table-hover api-table">
+                <thead>
+                    <tr>
+                        <th>Timestamp</th>
+                        <th>API Endpoint</th>
+                        <th>Response Time</th>
+                        <th>Status Code</th>
+                        <th>Error Message</th>
+                    </tr>
+                </thead>
+                <tbody id="performance-data-table">
+                    <!-- Data will be populated by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="chart-container">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h5>Detailed Performance Data</h5>
+        <div>
+            <button class="btn btn-sm btn-outline-secondary me-2" id="refresh-dashboard-btn">
+                <i class="fas fa-sync-alt me-1"></i>Refresh
+            </button>
+        </div>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover api-table">
+            <thead>
+                <tr>
+                    <th>Timestamp</th>
+                    <th>API Endpoint</th>
+                    <th>Response Time</th>
+                    <th>Status Code</th>
+                    <th>Error Message</th>
+                </tr>
+            </thead>
+            <tbody id="detailed-performance-data">
+                <!-- Data will be populated by JavaScript -->
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Global variables for charts
+    let distributionChart, errorChart, uptimeChart, endpointChart;
+    let currentMetrics = []; // Store current metrics for filtering
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        // Initialize charts
+        initCharts();
+        
+        // Load initial data
+        loadData();
+        
+        // Set up event listeners
+        document.getElementById('apply-filters-btn').addEventListener('click', applyFilters);
+        document.getElementById('refresh-dashboard-btn').addEventListener('click', loadData);
+        document.getElementById('export-dashboard-btn').addEventListener('click', exportDashboard);
+        
+        // Set up view toggle
+        document.getElementById('chart-view').addEventListener('change', function() {
+            document.getElementById('chart-container').style.display = 'block';
+            document.getElementById('table-container').style.display = 'none';
+        });
+        
+        document.getElementById('table-view').addEventListener('change', function() {
+            document.getElementById('chart-container').style.display = 'none';
+            document.getElementById('table-container').style.display = 'block';
+            loadPerformanceTableData();
+        });
+        
+        // Set up time range dropdown
+        document.getElementById('time-range-btn').addEventListener('click', function() {
+            document.getElementById('time-range-dropdown').classList.toggle('show');
+        });
+        
+        // Set up time range items
+        document.querySelectorAll('#time-range-dropdown .dropdown-item').forEach(item => {
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                const range = this.getAttribute('data-range');
+                const text = this.textContent;
+                document.getElementById('time-range-text').textContent = text;
+                document.getElementById('time-range-dropdown').classList.remove('show');
+                // Reload data with the selected time range
+                loadData();
+            });
+        });
+        
+        // Close dropdown when clicking outside
+        document.addEventListener('click', function(e) {
+            if (!document.getElementById('time-range-btn').contains(e.target)) {
+                document.getElementById('time-range-dropdown').classList.remove('show');
+            }
+        });
+    });
+    
+    function initCharts() {
+        // Response Time Distribution Chart
+        const distributionCtx = document.getElementById('responseDistributionChart').getContext('2d');
+        distributionChart = new Chart(distributionCtx, {
+            type: 'bar',
+            data: {
+                labels: ['0-50ms', '50-100ms', '100-200ms', '200-500ms', '500ms+'],
+                datasets: [{
+                    label: 'Number of Requests',
+                    data: [0, 0, 0, 0, 0],
+                    backgroundColor: '#4361ee'
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Number of Requests'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Response Time Range'
+                        }
+                    }
+                }
+            }
+        });
+
+        // Error Rate Chart
+        const errorCtx = document.getElementById('errorRateChart').getContext('2d');
+        errorChart = new Chart(errorCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Error Rate (%)',
+                    data: [],
+                    borderColor: '#f72585',
+                    backgroundColor: 'rgba(247, 37, 133, 0.1)',
+                    tension: 0.3,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Error Rate (%)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        }
+                    }
+                }
+            }
+        });
+
+        // Uptime Chart
+        const uptimeCtx = document.getElementById('uptimeChart').getContext('2d');
+        uptimeChart = new Chart(uptimeCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Uptime (%)',
+                    data: [],
+                    borderColor: '#4cc9f0',
+                    backgroundColor: 'rgba(76, 201, 240, 0.1)',
+                    tension: 0.3,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 100,
+                        title: {
+                            display: true,
+                            text: 'Uptime (%)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        }
+                    }
+                }
+            }
+        });
+
+        // Endpoint Performance Chart
+        const endpointCtx = document.getElementById('endpointPerformanceChart').getContext('2d');
+        endpointChart = new Chart(endpointCtx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: []
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        position: 'top'
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Response Time (ms)'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Time'
+                        }
+                    }
+                }
+            }
+        });
+    }
+    
+    function loadData() {
+        // Show loading state
+        document.getElementById('detailed-performance-data').innerHTML = '<tr><td colspan="5" class="text-center">Loading...</td></tr>';
+        
+        // Fetch data from backend
+        fetch('/api/metrics')
+        .then(response => response.json())
+        .then(metrics => {
+            currentMetrics = metrics; // Store for filtering
+            
+            // Populate endpoint filter dropdown
+            populateEndpointFilter(metrics);
+            
+            // Update all charts with real data
+            updateDistributionChart(metrics);
+            updateErrorRateChart(metrics);
+            updateUptimeChart(metrics);
+            updateEndpointPerformanceChart(metrics);
+            
+            // Update detailed performance data table
+            updateDetailedPerformanceTable(metrics);
+        })
+        .catch(error => {
+            document.getElementById('detailed-performance-data').innerHTML = `<tr><td colspan="5" class="text-center text-danger">Error loading data: ${error.message}</td></tr>`;
+            
+            // Show error state for charts
+            updateDistributionChart([]);
+            updateErrorRateChart([]);
+            updateUptimeChart([]);
+            updateEndpointPerformanceChart([]);
+        });
+    }
+    
+    function populateEndpointFilter(metrics) {
+        const endpointFilter = document.getElementById('endpoint-filter');
+        const endpoints = [...new Set(metrics.map(m => m.url))];
+        
+        // Clear existing options except the first one
+        endpointFilter.innerHTML = '<option value="">All Endpoints</option>';
+        
+        // Add endpoints as options
+        endpoints.forEach(endpoint => {
+            const option = document.createElement('option');
+            option.value = endpoint;
+            option.textContent = endpoint;
+            endpointFilter.appendChild(option);
+        });
+    }
+    
+    function updateDistributionChart(metrics) {
+        // Count response times in different ranges
+        const ranges = [0, 0, 0, 0, 0]; // 0-50ms, 50-100ms, 100-200ms, 200-500ms, 500ms+
+        
+        metrics.forEach(metric => {
+            if (metric.response_time) {
+                const time = metric.response_time;
+                if (time < 50) ranges[0]++;
+                else if (time < 100) ranges[1]++;
+                else if (time < 200) ranges[2]++;
+                else if (time < 500) ranges[3]++;
+                else ranges[4]++;
+            }
+        });
+        
+        distributionChart.data.datasets[0].data = ranges;
+        distributionChart.update();
+    }
+    
+    function updateErrorRateChart(metrics) {
+        // Group metrics by day for the last 7 days
+        const now = new Date();
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        
+        // Filter metrics from last 7 days
+        const recentMetrics = metrics.filter(m => {
+            if (!m.timestamp) return false;
+            const metricTime = new Date(m.timestamp);
+            return metricTime >= sevenDaysAgo && metricTime <= now;
+        });
+        
+        // Group by day
+        const dailyData = {};
+        recentMetrics.forEach(m => {
+            const date = new Date(m.timestamp);
+            const dayKey = date.toISOString().split('T')[0]; // YYYY-MM-DD
+            
+            if (!dailyData[dayKey]) {
+                dailyData[dayKey] = { total: 0, errors: 0 };
+            }
+            
+            dailyData[dayKey].total++;
+            if (m.error_message || (m.status_code && (m.status_code >= 400 || m.status_code === 0))) {
+                dailyData[dayKey].errors++;
+            }
+        });
+        
+        // Prepare chart data
+        const labels = [];
+        const data = [];
+        
+        // Sort dates
+        const sortedDates = Object.keys(dailyData).sort();
+        
+        sortedDates.forEach(date => {
+            labels.push(date);
+            const total = dailyData[date].total;
+            const errors = dailyData[date].errors;
+            const errorRate = total > 0 ? (errors / total) * 100 : 0;
+            data.push(errorRate.toFixed(2));
+        });
+        
+        errorChart.data.labels = labels;
+        errorChart.data.datasets[0].data = data;
+        errorChart.update();
+    }
+    
+    function updateUptimeChart(metrics) {
+        // Group metrics by day for the last 7 days
+        const now = new Date();
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        
+        // Filter metrics from last 7 days
+        const recentMetrics = metrics.filter(m => {
+            if (!m.timestamp) return false;
+            const metricTime = new Date(m.timestamp);
+            return metricTime >= sevenDaysAgo && metricTime <= now;
+        });
+        
+        // Group by day
+        const dailyData = {};
+        recentMetrics.forEach(m => {
+            const date = new Date(m.timestamp);
+            const dayKey = date.toISOString().split('T')[0]; // YYYY-MM-DD
+            
+            if (!dailyData[dayKey]) {
+                dailyData[dayKey] = { total: 0, successes: 0 };
+            }
+            
+            dailyData[dayKey].total++;
+            if (!m.error_message && m.status_code && m.status_code >= 200 && m.status_code < 300) {
+                dailyData[dayKey].successes++;
+            }
+        });
+        
+        // Prepare chart data
+        const labels = [];
+        const data = [];
+        
+        // Sort dates
+        const sortedDates = Object.keys(dailyData).sort();
+        
+        sortedDates.forEach(date => {
+            labels.push(date);
+            const total = dailyData[date].total;
+            const successes = dailyData[date].successes;
+            const uptime = total > 0 ? (successes / total) * 100 : 0;
+            data.push(uptime.toFixed(2));
+        });
+        
+        uptimeChart.data.labels = labels;
+        uptimeChart.data.datasets[0].data = data;
+        uptimeChart.update();
+    }
+    
+    function updateEndpointPerformanceChart(metrics) {
+        // Get unique endpoints
+        const endpoints = [...new Set(metrics.map(m => m.url))];
+        
+        // For demo purposes, show only the first 3 endpoints
+        const selectedEndpoints = endpoints.slice(0, 3);
+        
+        // Group metrics by endpoint and time (hourly for last 24 hours)
+        const now = new Date();
+        const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        
+        const endpointData = {};
+        selectedEndpoints.forEach(endpoint => {
+            endpointData[endpoint] = {};
+        });
+        
+        // Filter metrics for selected endpoints and time range
+        const filteredMetrics = metrics.filter(m => {
+            if (!m.timestamp || !m.url) return false;
+            const metricTime = new Date(m.timestamp);
+            return selectedEndpoints.includes(m.url) && 
+                   metricTime >= twentyFourHoursAgo && 
+                   metricTime <= now &&
+                   m.response_time;
+        });
+        
+        // Group by endpoint and hour
+        filteredMetrics.forEach(m => {
+            const hour = new Date(m.timestamp).getHours();
+            if (!endpointData[m.url][hour]) {
+                endpointData[m.url][hour] = { total: 0, count: 0 };
+            }
+            endpointData[m.url][hour].total += m.response_time;
+            endpointData[m.url][hour].count++;
+        });
+        
+        // Prepare chart data
+        const labels = [];
+        for (let i = 0; i < 24; i++) {
+            labels.push(`${i}:00`);
+        }
+        
+        const datasets = [];
+        const colors = ['#4361ee', '#4cc9f0', '#f72585'];
+        
+        selectedEndpoints.forEach((endpoint, index) => {
+            const data = [];
+            for (let i = 0; i < 24; i++) {
+                if (endpointData[endpoint][i] && endpointData[endpoint][i].count > 0) {
+                    data.push((endpointData[endpoint][i].total / endpointData[endpoint][i].count).toFixed(2));
+                } else {
+                    data.push(0);
+                }
+            }
+            
+            datasets.push({
+                label: endpoint,
+                data: data,
+                borderColor: colors[index % colors.length],
+                tension: 0.3
+            });
+        });
+        
+        endpointChart.data.labels = labels;
+        endpointChart.data.datasets = datasets;
+        endpointChart.update();
+    }
+    
+    function updateDetailedPerformanceTable(metrics) {
+        const tbody = document.getElementById('detailed-performance-data');
+        
+        if (metrics.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center">No data available</td></tr>';
+            return;
+        }
+        
+        // Show only the 10 most recent metrics
+        const recentMetrics = metrics.slice(0, 10);
+        
+        tbody.innerHTML = '';
+        recentMetrics.forEach(metric => {
+            const row = document.createElement('tr');
+            
+            // Format timestamp
+            let timestampDisplay = '-';
+            if (metric.timestamp) {
+                timestampDisplay = new Date(metric.timestamp).toLocaleString();
+            }
+            
+            // Format response time
+            let responseTimeDisplay = '-';
+            if (metric.response_time) {
+                responseTimeDisplay = `${metric.response_time.toFixed(2)}ms`;
+            }
+            
+            // Format status code
+            let statusCodeDisplay = '-';
+            if (metric.status_code) {
+                statusCodeDisplay = metric.status_code;
+            }
+            
+            // Format error message
+            let errorMessageDisplay = '-';
+            if (metric.error_message) {
+                errorMessageDisplay = metric.error_message;
+            }
+            
+            row.innerHTML = `
+                <td>${timestampDisplay}</td>
+                <td>${metric.url || '-'}</td>
+                <td>${responseTimeDisplay}</td>
+                <td>${statusCodeDisplay}</td>
+                <td>${errorMessageDisplay}</td>
+            `;
+            tbody.appendChild(row);
+        });
+    }
+    
+    function applyFilters() {
+        const endpoint = document.getElementById('endpoint-filter').value;
+        const status = document.getElementById('status-filter').value;
+        const time = document.getElementById('time-filter').value;
+        
+        // Filter metrics based on selected filters
+        let filteredMetrics = [...currentMetrics];
+        
+        // Apply endpoint filter
+        if (endpoint) {
+            filteredMetrics = filteredMetrics.filter(m => m.url === endpoint);
+        }
+        
+        // Apply status filter
+        if (status) {
+            if (status === '2xx') {
+                filteredMetrics = filteredMetrics.filter(m => m.status_code && m.status_code >= 200 && m.status_code < 300);
+            } else if (status === '4xx') {
+                filteredMetrics = filteredMetrics.filter(m => m.status_code && m.status_code >= 400 && m.status_code < 500);
+            } else if (status === '5xx') {
+                filteredMetrics = filteredMetrics.filter(m => m.status_code && m.status_code >= 500);
+            }
+        }
+        
+        // Apply time filter (simplified for demo)
+        if (time) {
+            const now = new Date();
+            let timeAgo;
+            
+            if (time.includes('Hour')) {
+                timeAgo = new Date(now.getTime() - 60 * 60 * 1000);
+            } else if (time.includes('24')) {
+                timeAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+            } else if (time.includes('7')) {
+                timeAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+            } else if (time.includes('30')) {
+                timeAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+            }
+            
+            if (timeAgo) {
+                filteredMetrics = filteredMetrics.filter(m => {
+                    if (!m.timestamp) return false;
+                    const metricTime = new Date(m.timestamp);
+                    return metricTime >= timeAgo;
+                });
+            }
+        }
+        
+        // Update charts with filtered data
+        updateDistributionChart(filteredMetrics);
+        updateErrorRateChart(filteredMetrics);
+        updateUptimeChart(filteredMetrics);
+        updateEndpointPerformanceChart(filteredMetrics);
+        updateDetailedPerformanceTable(filteredMetrics);
+    }
+    
+    function loadPerformanceTableData() {
+        // Use the same data as the detailed performance table
+        updateDetailedPerformanceTable(currentMetrics);
+    }
+    
+    function exportDashboard() {
+        // Download CSV file
+        window.location.href = '/api/export-metrics';
+    }
+</script>
+{% endblock %}
